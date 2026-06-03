@@ -1,6 +1,7 @@
 #include "mmu.h"
 #include "mbc.h"            // NEW: delegate banking to MBC
 #include "rom.h"
+#include "diagnostics.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -53,7 +54,7 @@ mmu_t mmu; // static mmu_t mmu change to static after running unit tests
  */
 void mmu_init() {
     memset(&mmu, 0, sizeof(mmu));
-    printf("MMU Initialized!.\n");
+    TRACE("MMU Initialized!.\n");
 }
 
 
@@ -67,7 +68,7 @@ void mmu_free() {
     if (mmu.rom_data) {
         free(mmu.rom_data);
             mmu.rom_data = NULL;
-            printf("ROM Memory freed!.\n");
+            TRACE("ROM Memory freed!.\n");
     }
 }
 

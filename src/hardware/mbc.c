@@ -1,6 +1,7 @@
 #include "mbc.h"
 #include "mmu.h"
 #include "rom.h"
+#include "diagnostics.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -47,7 +48,7 @@ void mbc_init(mmu_t* mmu) {
     }
     
     // DEBUG
-    printf("[DEBUG] MBC initialized: type=%d, rom_bank=%d\n",
+    TRACE("[DEBUG] MBC initialized: type=%d, rom_bank=%d\n",
         mmu->mbc_type, mmu->current_rom_bank);
 }
 

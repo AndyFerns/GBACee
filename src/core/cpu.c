@@ -3,7 +3,7 @@
 #include "rom.h"
 #include "alu.h"
 
-#include "debug.h"
+#include "diagnostics.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -91,7 +91,7 @@ static uint16_t fetch_d16() {
 int cpu_step() {
     // Halt if PC goes beyond 64KB or ROM loaded range
     if (cpu.PC == 0xFFFF) { // ((uint32_t)cpu.PC >= 0x10000)
-        printf("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
+        TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
         // cpu.halted = true;
         return 0;
     }
@@ -121,8 +121,9 @@ int cpu_step() {
     // printf("[PC=0x%04X] Opcode 0x%02X | A=0x%02X F=0x%02X B=0x%02X C=0x%02X D=0x%02X E=0x%02X H=0x%02X L=0x%02X SP=0x%04X\n", 
     //        pc, opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP
     // );
-    // use new debug macro
-    LOG_CPU_STATE(pc, opcode, cpu);
+    // use new diagnostics macro (runtime-configurable via --trace-cpu)
+    TRACE_CPU("[PC=0x%04X] Opcode 0x%02X | A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X SP=%04X\n",
+        pc, opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP);
 
     // Instruction Execution Suite
     bool success;
@@ -136,7 +137,9 @@ int cpu_step() {
         //    pc, cb_opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP
         // );
 
-        LOG_CB_STATE(pc, cb_opcode, cpu);
+        // use new diagnostics macro (runtime-configurable via --trace-cpu)
+        TRACE_CPU("[PC=0x%04X] Opcode 0xCB 0x%02X | A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X SP=%04X\n",
+            pc, cb_opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP);
         
         success =  execute_cb_opcode(cb_opcode);
     } else {
@@ -157,7 +160,7 @@ int cpu_step() {
 
     if (!success) {
         // unimplemented instruction was hit.
-        printf("[FATAL] Unimplemented opcode 0x%02X at 0x%04X\n", opcode, pc);
+        LOG_ERROR("[FATAL] Unimplemented opcode 0x%02X at 0x%04X\n", opcode, pc);
         return 0;
     }
     // placeholder value
@@ -1736,7 +1739,7 @@ bool execute_opcode(uint8_t opcode) {
 
         // HALT instruction
         case 0x76: {
-            printf("[HALT] HALT instruction encountered at 0x%04X\n", cpu.PC);
+            TRACE_CPU("[HALT] HALT instruction encountered at 0x%04X\n", cpu.PC);
             cpu.halted = true;
             break; // indicate that cpu is halted
         }
@@ -1744,7 +1747,7 @@ bool execute_opcode(uint8_t opcode) {
         // STOP Instruction
         // two-byte instruction which halts the CPU screen and puts it into a low power state
         case 0x10: {
-            printf("[STOP] instruction encountered at 0x%04X\n", cpu.PC);
+            TRACE_CPU("[STOP] instruction encountered at 0x%04X\n", cpu.PC);
             
             fetch_d8(); // increment the PC past the 0x00
 
@@ -1764,7 +1767,7 @@ bool execute_opcode(uint8_t opcode) {
         }
 
         default:
-            printf("[HALT] Unimplemented opcode: 0x%02X at 0x%04X\n", opcode, cpu.PC);
+            LOG_ERROR("[HALT] Unimplemented opcode: 0x%02X at 0x%04X\n", opcode, cpu.PC);
             cpu.PC--; // Rewind PC for debugging
 
             cpu.halted = true;
@@ -2275,7 +2278,7 @@ bool execute_cb_opcode(uint8_t opcode) {
 
 
         default: 
-            printf("[CB] Unimplemented opcode: 0x%02X\n", opcode);
+            LOG_ERROR("[CB] Unimplemented opcode: 0x%02X\n", opcode);
             cpu.halted = true;
             return false;
     }
