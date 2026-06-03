@@ -39,12 +39,6 @@ endforeach()
 # SDL2 (MinGW)
 # ----------------------------------------
 
-target_include_directories(gbcee PRIVATE
-    C:/msys64/mingw64/include/SDL2
-)
+find_package(SDL2 REQUIRED)
 
-target_link_directories(gbcee PRIVATE
-    C:/msys64/mingw64/lib
-)
-
-target_link_libraries(gbcee SDL2)
+target_link_libraries(gbcee PRIVATE SDL2::SDL2)
