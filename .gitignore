@@ -12,9 +12,13 @@
 *.elf
 
 # Rom testing suite
-test_roms
-build.bat
+# test_roms
+
+# build.bat
 *.gb
+
+# Output files
+*.log
 
 # Linker output
 *.ilk
@@ -67,7 +71,7 @@ CMakeCache.txt
 CMakeFiles
 CMakeScripts
 Testing
-Makefile
+# Makefile
 cmake_install.cmake
 install_manifest.txt
 compile_commands.json

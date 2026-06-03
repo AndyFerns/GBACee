@@ -4,6 +4,8 @@
 #include "mmu.h"
 #include "timer.h"
 #include "interrupts.h"
+#include "diagnostics.h"
+#include "args.h"
 
 // TODO ppu.h, and timer.h
 
@@ -21,10 +23,20 @@
  * 0 on success, non-zero on failure.
  */
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <ROM file>\n", argv[0]);
-        return 1;
+    // Parse command-line arguments
+    int rom_index = diag_parse_args(argc, argv, &diag);
+
+    if (rom_index == -1) {
+        // --help was printed, or an error occurred
+        if (argc < 2) {
+            fprintf(stderr, "Usage: %s <ROM file> [options]\n", argv[0]);
+            fprintf(stderr, "Use --help for full usage information.\n");
+        }
+        return (argc < 2) ? 1 : 0;
     }
+
+    // Initialize the diagnostics subsystem
+    diag_init(&diag);
 
     // should follow emulator lifecycle:
     // initialize hardware -> load the game -> run main loop -> clean up resources 
@@ -37,13 +49,14 @@ int main(int argc, char *argv[]) {
 
     // 2. Load the game rom
     // only call mmu_load_rom and not load_rom
-    if (mmu_load_rom(argv[1]) != 0) {
-        fprintf(stderr, "Error: Failed to load ROM '%s'.\n", argv[1]);
+    if (mmu_load_rom(argv[rom_index]) != 0) {
+        fprintf(stderr, "Error: Failed to load ROM '%s'.\n", argv[rom_index]);
+        diag_shutdown();
         return 1;
     }
 
     // Main emulation loop
-    printf(" --- Starting Emulation --- \n");
+    TRACE(" --- Starting Emulation --- \n");
     while (true) { 
         /** Execute one instruction per cycle 
          * cpu step handles the halted state internally
@@ -71,7 +84,8 @@ int main(int argc, char *argv[]) {
     }
     
     // 4. cleanup  
-    printf(" --- Emulation Halted --- ");
+    TRACE(" --- Emulation Halted --- \n");
+    diag_shutdown();
     mmu_free(); // prevent memory leaks from loaded roms
     return 0;
 }

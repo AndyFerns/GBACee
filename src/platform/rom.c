@@ -1,5 +1,6 @@
 #include "rom.h"
 #include "mmu.h"
+#include "diagnostics.h"
 #include <stdio.h>
 #include <string.h> //for memset()
 #include <stdlib.h>

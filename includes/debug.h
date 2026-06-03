@@ -1,3 +1,29 @@
+/*
+========================================
+        MIGRATION NOTICE
+========================================
+
+This file is DEPRECATED and kept for historical reference only.
+
+The compile-time debug macros defined here have been superseded by the
+runtime-configurable diagnostics subsystem in:
+
+    includes/debug/diagnostics.h
+    src/debug/diagnostics.c
+
+New code should #include "diagnostics.h" instead.
+
+See diagnostics.h for the trace macros:
+    TRACE(...)
+    TRACE_CPU(...)
+    TRACE_REGISTERS(...)
+    TRACE_STACK(...)
+    TRACE_BLARGG(...)
+
+Migrated: June 2026
+========================================
+*/
+
 #pragma once
 
 #include <stdio.h>
