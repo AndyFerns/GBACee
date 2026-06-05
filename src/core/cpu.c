@@ -141,7 +141,7 @@ int cpu_step() {
     // CB - Prefixed Bit operations 
     if (opcode == 0xCB) {
         cb_used = true;
-        uint8_t cb_opcode = fetch_d8();
+        cb_opcode = fetch_d8();  // assign to outer variable, do NOT re-declare
 
         // special logging for CB_opcodes
         // printf("[PC=0x%04X] Opcode 0xCB 0x%02X | A=0x%02X F=0x%02X B=0x%02X C=0x%02X D=0x%02X E=0x%02X H=0x%02X L=0x%02X SP=0x%04X\n", 
@@ -1174,7 +1174,7 @@ bool execute_opcode(uint8_t opcode) {
             C - Set or reset acc
          */
 
-        case 0xE8: ADD_SP(cpu.SP); break;   //ADD SP, #
+        case 0xE8: ADD_SP((int8_t)fetch_d8()); break;   //ADD SP, #
 
 
         /**
@@ -1795,8 +1795,7 @@ bool execute_opcode(uint8_t opcode) {
 
             cpu.halted = true;
             // cpu.stopped = true;
-            return true;
-            // break;
+            break;
         }
 
         default:
@@ -1990,7 +1989,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL B
         case 0x10: {
             bool carry_out;
-            cpu.B = RL(cpu.B, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.B = RL(cpu.B, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.B == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2000,7 +2000,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL C
         case 0x11: {
             bool carry_out;
-            cpu.C = RL(cpu.C, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.C = RL(cpu.C, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.C == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2010,7 +2011,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL D
         case 0x12: {
             bool carry_out;
-            cpu.D = RL(cpu.D, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.D = RL(cpu.D, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.D == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2020,7 +2022,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL E
         case 0x13: {
             bool carry_out;
-            cpu.E = RL(cpu.E, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.E = RL(cpu.E, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.E == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2030,7 +2033,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL H
         case 0x14: {
             bool carry_out;
-            cpu.H = RL(cpu.H, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.H = RL(cpu.H, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.H == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2040,7 +2044,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL L
         case 0x15: {
             bool carry_out;
-            cpu.L = RL(cpu.L, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.L = RL(cpu.L, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.L == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2051,7 +2056,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         case 0x16: {
             uint8_t val = mmu_read(REG_HL);
             bool carry_out;
-            uint8_t result = RL(val, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            uint8_t result = RL(val, old_carry, &carry_out);
             mmu_write(REG_HL, result);
             cpu.F = 0;
             if (result == 0) cpu.F |= FLAG_Z;
@@ -2062,13 +2068,12 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL A
         case 0x17: {
             bool carry_out;
-            // save carry BEFORE clearing F
+            // save carry BEFORE clearing F, normalized to 0 or 1
             bool old_carry = (cpu.F & FLAG_C) != 0;
 
-            cpu.A = RL(cpu.A, (cpu.F & FLAG_C), &carry_out);
+            cpu.A = RL(cpu.A, old_carry, &carry_out);
             cpu.F = 0;
-            // Z flag is not set for RL A
-            if (cpu.A == 0) cpu.F |= FLAG_Z; 
+            if (cpu.A == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
             break;
         }
