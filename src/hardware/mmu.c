@@ -54,6 +54,14 @@ mmu_t mmu; // static mmu_t mmu change to static after running unit tests
  */
 void mmu_init() {
     memset(&mmu, 0, sizeof(mmu));
+    
+    // Set post-boot ROM default hardware register values
+    mmu.io[0x40] = 0x91; // LCDC
+    mmu.io[0x41] = 0x85; // STAT
+    mmu.io[0x47] = 0xFC; // BGP
+    mmu.io[0x48] = 0xFF; // OBP0
+    mmu.io[0x49] = 0xFF; // OBP1
+    
     TRACE("MMU Initialized!.\n");
 }
 
