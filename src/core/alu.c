@@ -208,7 +208,7 @@ void ADD_HL(uint16_t val) {
  * 
  * @returns void
  */
-void ADD_SP(uint16_t val) {
+void ADD_SP(int8_t val) {
     uint16_t sp = cpu.SP;
     uint16_t result = sp + val;
 
