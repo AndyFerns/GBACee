@@ -24,6 +24,7 @@ typedef struct CPU {
     bool ime;           // Master Interrupt enable flag
     bool ime_enable;    // EI (enable interrupts) sets this -> ime becomes true after next instruction 
     bool ime_disable;   // DI (disable interrupts) sets this -> ime becomes false after next instruction
+    bool error;         // set true on unimplemented opcode or fatal condition
 } CPU;
 
 extern CPU cpu;

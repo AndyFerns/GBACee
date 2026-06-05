@@ -42,6 +42,7 @@ void cpu_reset() {
     cpu.ime = false;
     cpu.ime_enable = false;
     cpu.ime_disable = false;
+    cpu.error = false;
 }
 
 
@@ -93,10 +94,11 @@ static uint16_t fetch_d16() {
  */
 int cpu_step() {
     // Halt if PC goes beyond 64KB or ROM loaded range
-    if (cpu.PC == 0xFFFF) { // ((uint32_t)cpu.PC >= 0x10000)
+    if ((uint32_t)cpu.PC >= 0x10000) { 
         TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
-        // cpu.halted = true;
-        return 0;
+        cpu.error = true;
+        cpu.halted = true;
+        return 4;
     }
 
     if (cpu.halted) {
@@ -172,7 +174,9 @@ int cpu_step() {
     if (!success) {
         // unimplemented instruction was hit.
         LOG_ERROR("[FATAL] Unimplemented opcode 0x%02X at 0x%04X\n", opcode, pc);
-        return 0;
+        cpu.error = true;
+        cpu.halted = true;
+        return 4;
     }
 
     // access cb_used here 
@@ -915,7 +919,7 @@ bool execute_opcode(uint8_t opcode) {
             Z - Set if result is zero.
             N - Set.
             H - Set if no borrow from bit 4.
-            C - Set if no borro
+            C - Set if no borrow
          */
 
         case 0x9F: SBC_A(cpu.A); break;     //SBC A, A
@@ -1802,6 +1806,7 @@ bool execute_opcode(uint8_t opcode) {
             LOG_ERROR("[HALT] Unimplemented opcode: 0x%02X at 0x%04X\n", opcode, cpu.PC);
             cpu.PC--; // Rewind PC for debugging
 
+            cpu.error = true;
             cpu.halted = true;
             return false; // Safely halt on unknown opcode   
     }   
@@ -2324,6 +2329,7 @@ bool execute_cb_opcode(uint8_t opcode) {
 
         default: 
             LOG_ERROR("[CB] Unimplemented opcode: 0x%02X\n", opcode);
+            cpu.error = true;
             cpu.halted = true;
             return false;
     }
