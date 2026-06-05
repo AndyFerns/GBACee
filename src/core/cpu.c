@@ -94,12 +94,12 @@ static uint16_t fetch_d16() {
  */
 int cpu_step() {
     // Halt if PC goes beyond 64KB or ROM loaded range
-    if ((uint32_t)cpu.PC >= 0x10000) { 
-        TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
-        cpu.error = true;
-        cpu.halted = true;
-        return 4;
-    }
+    // if (cpu.PC == 0xFFFF) { // ((uint32_t)cpu.PC >= 0x10000)
+    //     TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
+    //     cpu.error = true;
+    //     cpu.halted = true;
+    //     return 4;
+    // }
 
     if (cpu.halted) {
         return 4;
