@@ -35,7 +35,6 @@ typedef enum {
 #define STAT_LYC_FLAG          0x04
 #define STAT_MODE_MASK         0x03
 
-
 // OAM entry
 typedef struct {
     uint8_t y;
@@ -50,7 +49,6 @@ typedef struct {
 #define SPRITE_FLIP_X     0x20
 #define SPRITE_PALETTE    0x10  // 0=OBP0, 1=OBP1
 
-// PPU struct containing 
 typedef struct {
     // SDL
     SDL_Window   *window;
@@ -77,7 +75,7 @@ extern PPU ppu;
  *
  * Resets internal registers and prepares the PPU for rendering.
  */
-void init_ppu();
+void ppu_init();
 
 /**
  * ppu_step - Advances the PPU by one step (typically per CPU cycle).
@@ -93,6 +91,13 @@ void ppu_step();
  * Draws the current screen contents using SDL.
  * Should be called after each complete frame (VBlank).
  */
-void ppu_render_frame();
+void ppu_render_scanline();
+
+/**
+ * ppu_shutdown - Call when required to shut down the PPU 
+ * 
+ * Shuts down the PPU and cleans up SDL resources
+ */
+void ppu_shutdown(void);
 
 #endif

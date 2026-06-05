@@ -3,54 +3,55 @@
 #include <SDL2/SDL.h>
 #include <string.h>
 
-// change according to screen sizes
-#define SCREEN_WIDTH 160
-#define SCREEN_HEIGHT 144
+// Global PPU state
+PPU ppu;
 
-// SDL rendering suite
-static SDL_Window* window = NULL;
-static SDL_Renderer* renderer = NULL;
-static SDL_Texture* texture = NULL;
-static uint32_t framebuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+// DMG grayscale palette — maps 2-bit shade to ARGB
+static const uint32_t dmg_colors[4] = {
+    0xFFFFFFFF,  // 0 — White
+    0xFFAAAAAA,  // 1 — Light gray
+    0xFF555555,  // 2 — Dark gray
+    0xFF000000,  // 3 — Black
+};
+
+// Palette decode: maps 2-bit color index through a palette register
+static uint8_t decode_palette(uint8_t palette_reg, uint8_t color_idx) {
+    return (palette_reg >> (color_idx * 2)) & 0x03;
+}
+
+// Forward declarations for internal helpers
+static void ppu_set_mode(PPUMode mode);
+static void ppu_check_lyc(void);
+static void ppu_oam_scan(void);
+static void ppu_present_frame(void);
 
 /**
- * init_ppu - See header.
+ * @brief Initializes the PPU, creates the SDL window and rendering context.
  */
-void init_ppu() {
+void ppu_init(void) {
     SDL_Init(SDL_INIT_VIDEO);
-    window = SDL_CreateWindow(
-        "GameBoy Emulator",
+    ppu.window = SDL_CreateWindow(
+        "GBCee - Game Boy Emulator",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
-        SCREEN_WIDTH * 2,
-        SCREEN_HEIGHT * 2,
+        SCREEN_WIDTH * SCREEN_SCALE,
+        SCREEN_HEIGHT * SCREEN_SCALE,
         0
     );
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    texture = SDL_CreateTexture(
-        renderer,
+    ppu.renderer = SDL_CreateRenderer(ppu.window, -1, SDL_RENDERER_ACCELERATED);
+    ppu.texture = SDL_CreateTexture(
+        ppu.renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
         SCREEN_WIDTH,
         SCREEN_HEIGHT
     );
-    memset(framebuffer, 0xFF, sizeof(framebuffer)); // White screen
-}
+    memset(ppu.framebuffer, 0xFF, sizeof(ppu.framebuffer)); // White screen
 
-/**
- * ppu_step - See header.
- */
-void ppu_step() {
-    // Placeholder for scanline rendering logic
-    // Eventually simulate LY, LCDC, STAT, etc.
-}
-
-/**
- * ppu_render_frame - See header.
- */
-void ppu_render_frame() {
-    SDL_UpdateTexture(texture, NULL, framebuffer, SCREEN_WIDTH * sizeof(uint32_t));
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
-    SDL_RenderPresent(renderer);
+    // Initialize PPU state
+    ppu.mode = PPU_MODE_OAM;
+    ppu.dots = 0;
+    ppu.ly = 0;
+    ppu.window_line = 0;
+    ppu.sprite_count = 0;
 }
