@@ -45,13 +45,14 @@ clean:
 
 # --- Testing ---
 # Build and run all test binaries
-TEST_BINS = tests/unit/cpu_tester.exe tests/unit/mmu_tester.exe tests/unit/mbc_tester.exe tests/unit/cpu_opcode_tester.exe
+TEST_BINS = tests/unit/cpu_tester.exe tests/unit/mmu_tester.exe tests/unit/mbc_tester.exe tests/unit/cpu_opcode_tester.exe tests/unit/ppu_tester.exe
 
 tests: $(TEST_BINS)
 	./tests/unit/cpu_tester.exe
 	./tests/unit/mmu_tester.exe
 	./tests/unit/mbc_tester.exe
 	./tests/unit/cpu_opcode_tester.exe
+	./tests/unit/ppu_tester.exe
 
 tests/unit/cpu_tester.exe: tests/unit/cpu_test.c
 	$(CC) $(CFLAGS) $< src/core/*.c src/hardware/*.c src/platform/*.c src/debug/*.c -o $@ $(LDFLAGS)
@@ -63,6 +64,9 @@ tests/unit/mbc_tester.exe: tests/unit/mbc_test.c
 	$(CC) $(CFLAGS) $< src/core/*.c src/hardware/*.c src/platform/*.c src/debug/*.c -o $@ $(LDFLAGS)
 
 tests/unit/cpu_opcode_tester.exe: tests/unit/cpu_opcode_test.c
+	$(CC) $(CFLAGS) $< src/core/*.c src/hardware/*.c src/platform/*.c src/debug/*.c -o $@ $(LDFLAGS)
+
+tests/unit/ppu_tester.exe: tests/unit/ppu_test.c
 	$(CC) $(CFLAGS) $< src/core/*.c src/hardware/*.c src/platform/*.c src/debug/*.c -o $@ $(LDFLAGS)
 
 # --- Test ROMs ---
