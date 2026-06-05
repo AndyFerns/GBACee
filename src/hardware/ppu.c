@@ -210,3 +210,164 @@ static void ppu_oam_scan(void) {
         }
     }
 }
+
+
+/**
+ * @brief Renders a single scanline into the framebuffer.
+ *
+ * Draws background, window, and sprite layers for the current scanline (ppu.ly).
+ */
+void ppu_render_scanline(void) {
+    uint8_t lcdc = mmu_read(0xFF40);
+    uint8_t scx  = mmu_read(0xFF43);
+    uint8_t scy  = mmu_read(0xFF42);
+    uint8_t wx   = mmu_read(0xFF4B);
+    uint8_t wy   = mmu_read(0xFF4A);
+    uint8_t bgp  = mmu_read(0xFF47);
+
+    // bg_color_idx[x]: tracks BG color index at each pixel for sprite priority
+    uint8_t bg_color_idx[SCREEN_WIDTH] = {0};
+
+    // --- Background ---
+    if (lcdc & LCDC_BG_ENABLE) {
+        // Which tile map: 0x9800 or 0x9C00
+        uint16_t bg_map = (lcdc & LCDC_BG_MAP) ? 0x9C00 : 0x9800;
+
+        // Which tile data: 0x8000 (unsigned) or 0x8800 (signed)
+        bool     signed_tile = !(lcdc & LCDC_BG_TILE_DATA);
+
+        uint8_t y_in_map = (ppu.ly + scy) & 0xFF;  // wraps at 256
+        uint8_t tile_row = y_in_map / 8;
+        uint8_t fine_y   = y_in_map % 8;
+
+        for (int px = 0; px < SCREEN_WIDTH; px++) {
+            uint8_t x_in_map  = (px + scx) & 0xFF;
+            uint8_t tile_col  = x_in_map / 8;
+            uint8_t fine_x    = 7 - (x_in_map % 8);  // bit 7 = leftmost pixel
+
+            uint16_t map_addr = bg_map + tile_row * 32 + tile_col;
+            uint8_t  tile_id  = mmu_read(map_addr);
+
+            uint16_t tile_addr;
+            if (signed_tile) {
+                // Signed addressing: tile 0 is at 0x9000, range -128 to 127
+                tile_addr = 0x9000 + (int8_t)tile_id * 16;
+            } else {
+                tile_addr = 0x8000 + tile_id * 16;
+            }
+
+            // Each tile row = 2 bytes (lo and hi bit planes)
+            uint8_t lo = mmu_read(tile_addr + fine_y * 2);
+            uint8_t hi = mmu_read(tile_addr + fine_y * 2 + 1);
+
+            uint8_t color_idx = ((hi >> fine_x) & 1) << 1 | ((lo >> fine_x) & 1);
+            bg_color_idx[px]  = color_idx;
+
+            uint8_t shade = decode_palette(bgp, color_idx);
+            ppu.framebuffer[ppu.ly * SCREEN_WIDTH + px] = dmg_colors[shade];
+        }
+    }
+
+    // --- Window ---
+    if ((lcdc & LCDC_WINDOW_ENABLE) && ppu.ly >= wy) {
+        uint16_t win_map    = (lcdc & LCDC_WINDOW_MAP) ? 0x9C00 : 0x9800;
+        bool     signed_tile = !(lcdc & LCDC_BG_TILE_DATA);
+
+        uint8_t fine_y   = ppu.window_line % 8;
+        uint8_t tile_row = ppu.window_line / 8;
+
+        int win_x_start = (int)wx - 7;  // WX is offset by 7
+
+        for (int px = (win_x_start < 0 ? 0 : win_x_start); px < SCREEN_WIDTH; px++) {
+            uint8_t x_in_win = px - win_x_start;
+            uint8_t tile_col = x_in_win / 8;
+            uint8_t fine_x   = 7 - (x_in_win % 8);
+
+            uint16_t map_addr = win_map + tile_row * 32 + tile_col;
+            uint8_t  tile_id  = mmu_read(map_addr);
+
+            uint16_t tile_addr;
+            if (signed_tile) {
+                tile_addr = 0x9000 + (int8_t)tile_id * 16;
+            } else {
+                tile_addr = 0x8000 + tile_id * 16;
+            }
+
+            uint8_t lo = mmu_read(tile_addr + fine_y * 2);
+            uint8_t hi = mmu_read(tile_addr + fine_y * 2 + 1);
+
+            uint8_t color_idx = ((hi >> fine_x) & 1) << 1 | ((lo >> fine_x) & 1);
+            bg_color_idx[px]  = color_idx;
+
+            uint8_t shade = decode_palette(bgp, color_idx);
+            ppu.framebuffer[ppu.ly * SCREEN_WIDTH + px] = dmg_colors[shade];
+        }
+        ppu.window_line++;
+    }
+
+    // --- Sprites ---
+    if (lcdc & LCDC_OBJ_ENABLE) {
+        int sprite_h = (lcdc & LCDC_OBJ_SIZE) ? 16 : 8;
+
+        // Draw sprites in reverse order so lower-index sprites win on overlap
+        for (int i = ppu.sprite_count - 1; i >= 0; i--) {
+            OAMEntry *sp = &ppu.sprite_buffer[i];
+
+            int sprite_x = (int)sp->x - 8;  // X is offset by 8
+            int sprite_y = (int)sp->y - 16; // Y is offset by 16
+            int row      = ppu.ly - sprite_y;
+
+            // Y flip
+            if (sp->flags & SPRITE_FLIP_Y) row = (sprite_h - 1) - row;
+
+            // For 8x16, mask bit 0 of tile index
+            uint8_t tile_id = sp->tile;
+            if (sprite_h == 16) tile_id &= 0xFE;
+
+            uint16_t tile_addr = 0x8000 + tile_id * 16 + row * 2;
+            uint8_t  lo        = mmu_read(tile_addr);
+            uint8_t  hi        = mmu_read(tile_addr + 1);
+
+            uint8_t pal_reg = (sp->flags & SPRITE_PALETTE)
+                              ? mmu_read(0xFF49)   // OBP1
+                              : mmu_read(0xFF48);  // OBP0
+
+            for (int bit = 7; bit >= 0; bit--) {
+                int px = sprite_x + (7 - bit);
+                if (px < 0 || px >= SCREEN_WIDTH) continue;
+
+                // X flip
+                int real_bit = (sp->flags & SPRITE_FLIP_X) ? (7 - bit) : bit;
+
+                uint8_t color_idx = ((hi >> real_bit) & 1) << 1 | ((lo >> real_bit) & 1);
+                if (color_idx == 0) continue;  // color 0 = transparent for sprites
+
+                // BG priority: if flag set and BG color is not 0, sprite is hidden
+                if ((sp->flags & SPRITE_PRIORITY) && bg_color_idx[px] != 0) continue;
+
+                uint8_t shade = decode_palette(pal_reg, color_idx);
+                ppu.framebuffer[ppu.ly * SCREEN_WIDTH + px] = dmg_colors[shade];
+            }
+        }
+    }
+}
+
+/**
+ * @brief Presents the completed framebuffer to the SDL window.
+ */
+static void ppu_present_frame(void) {
+    SDL_UpdateTexture(ppu.texture, NULL, ppu.framebuffer,
+                      SCREEN_WIDTH * sizeof(uint32_t));
+    SDL_RenderClear(ppu.renderer);
+    SDL_RenderCopy(ppu.renderer, ppu.texture, NULL, NULL);
+    SDL_RenderPresent(ppu.renderer);
+}
+
+/**
+ * @brief Shuts down the PPU and cleans up SDL resources.
+ */
+void ppu_shutdown(void) {
+    if (ppu.texture)  SDL_DestroyTexture(ppu.texture);
+    if (ppu.renderer) SDL_DestroyRenderer(ppu.renderer);
+    if (ppu.window)   SDL_DestroyWindow(ppu.window);
+}
