@@ -64,6 +64,9 @@ typedef struct mmu_t {
     uint8_t tima;               // 0xFF05 - TIMA register counter
     uint8_t tma;                // 0xFF06 - Timer modulo
     uint8_t tac;                // 0xFF07 - Timer control
+
+    // Serial transfer
+    uint8_t serial_data;        // 0xFF01 - Serial transfer data
 } mmu_t;
 
 /**
