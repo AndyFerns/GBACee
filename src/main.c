@@ -5,9 +5,9 @@
 #include "timer.h"
 #include "interrupts.h"
 #include "diagnostics.h"
+#include "ppu.h"
+#include <SDL2/SDL.h>
 #include "args.h"
-
-// TODO ppu.h, and timer.h
 
 
 /**
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     // 1. Initialize hardware
     mmu_init();
     cpu_reset();
-    // ppu_init();   // placeholder for initializing the Picture Processing Unit 
+    ppu_init();      // Initialize the Picture Processing Unit 
     // timer_init(); // placeholder for initializing the timer
 
     // 2. Load the game rom
@@ -58,33 +58,36 @@ int main(int argc, char *argv[]) {
     // Main emulation loop
     TRACE(" --- Starting Emulation --- \n");
     while (true) { 
+        // Poll SDL events (needed for window close, future joypad)
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) goto cleanup;
+        }
+
         /** Execute one instruction per cycle 
          * cpu step handles the halted state internally
          * doesnt fetch an opcode for halting
         */
         int cycles_this_step = cpu_step();
 
-        // check if the STOP instruction has been executed
-        // if (cpu.stopped) {
-        //     break;
-        // }
-
-        // check if the cpu has halted and has 0 cycless this step
-        if (cycles_this_step == 0) {
+        if (cpu.error) {
+            LOG_ERROR("CPU encountered a fatal error. Stopping.\n");
             break;
         }
+        // halted CPUs still tick at 4 cycles waiting for interrupts — don't break on them
 
         // update other hardware components with the elapsed cycles
         timer_step(cycles_this_step);
-        // PLACEHOLDER: Future hardware steps will go here.
-        // ppu_step(cycles_from_cpu);
+        ppu_step(cycles_this_step);
 
         // Check for interrupts after all hardware has been updated
         handle_interrupts();
     }
-    
+
+cleanup:
     // 4. cleanup  
     TRACE(" --- Emulation Halted --- \n");
+    ppu_shutdown();
     diag_shutdown();
     mmu_free(); // prevent memory leaks from loaded roms
     return 0;
