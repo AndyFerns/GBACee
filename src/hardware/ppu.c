@@ -29,6 +29,7 @@ static void ppu_present_frame(void);
  * @brief Initializes the PPU, creates the SDL window and rendering context.
  */
 void ppu_init(void) {
+    SDL_SetMainReady();
     SDL_Init(SDL_INIT_VIDEO);
     ppu.window = SDL_CreateWindow(
         "GBCee - Game Boy Emulator",
@@ -361,6 +362,15 @@ static void ppu_present_frame(void) {
     SDL_RenderClear(ppu.renderer);
     SDL_RenderCopy(ppu.renderer, ppu.texture, NULL, NULL);
     SDL_RenderPresent(ppu.renderer);
+
+    // Frame rate limiting (59.73 Hz ~ 16.74 ms per frame)
+    static uint32_t last_frame_time = 0;
+    uint32_t current_time = SDL_GetTicks();
+    uint32_t elapsed = current_time - last_frame_time;
+    if (elapsed < 16) {
+        SDL_Delay(16 - elapsed);
+    }
+    last_frame_time = SDL_GetTicks();
 }
 
 /**
