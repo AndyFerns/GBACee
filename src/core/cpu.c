@@ -3,6 +3,9 @@
 #include "rom.h"
 #include "alu.h"
 
+// for cycle tables
+#include "cycles.h"
+
 #include "diagnostics.h"
 
 #include <stdbool.h>
@@ -104,7 +107,7 @@ int cpu_step() {
     uint8_t ie_reg = mmu_get_ie_register();
     uint8_t if_reg = mmu_get_if_register();
     bool halt_bug = (mmu_read(cpu.PC) == 0x76 && // is the next instruction HALT?
-                                cpu.ime &&            // IME disabled?
+                                !cpu.ime &&            // IME disabled?
                                 (ie_reg & if_reg & 0x1F) != 0); // is there a pending & enabled interrupt?
 
 
@@ -125,11 +128,19 @@ int cpu_step() {
     TRACE_CPU("[PC=0x%04X] Opcode 0x%02X | A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X SP=%04X\n",
         pc, opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP);
 
+    // Snapshot PC right before execute (post-opcode fetch, pre-operand fetch)
+    uint16_t pre_exec_pc = cpu.PC;
+    
     // Instruction Execution Suite
     bool success;
 
+    // declare before to prevent scoping errors
+    uint8_t cb_opcode = 0;
+    bool cb_used = false;
+
     // CB - Prefixed Bit operations 
     if (opcode == 0xCB) {
+        cb_used = true;
         uint8_t cb_opcode = fetch_d8();
 
         // special logging for CB_opcodes
@@ -163,8 +174,30 @@ int cpu_step() {
         LOG_ERROR("[FATAL] Unimplemented opcode 0x%02X at 0x%04X\n", opcode, pc);
         return 0;
     }
+
+    // access cb_used here 
+    if (cb_used) {
+        return cb_opcode_cycles[cb_opcode];
+    }
+
+    if (branch_cycles[opcode] != 0) {
+        // Determine expected not-taken PC (where PC lands if branch skipped):
+        // JR cc  (0x20,0x28,0x30,0x38): 1 operand byte  → not-taken PC = pre_exec_pc + 1
+        // JP cc  (0xC2,0xCA,0xD2,0xDA): 2 operand bytes → not-taken PC = pre_exec_pc + 2
+        // CALL cc(0xC4,0xCC,0xD4,0xDC): 2 operand bytes → not-taken PC = pre_exec_pc + 2
+        // RET cc (0xC0,0xC8,0xD0,0xD8): 0 operand bytes → not-taken PC = pre_exec_pc + 0
+        static const uint8_t operand_bytes[256] = {
+            [0x20]=1,[0x28]=1,[0x30]=1,[0x38]=1,   // JR cc
+            [0xC2]=2,[0xCA]=2,[0xD2]=2,[0xDA]=2,   // JP cc
+            [0xC4]=2,[0xCC]=2,[0xD4]=2,[0xDC]=2,   // CALL cc
+            [0xC0]=0,[0xC8]=0,[0xD0]=0,[0xD8]=0,   // RET cc
+        };
+        uint16_t not_taken_pc = pre_exec_pc + operand_bytes[opcode];
+        bool taken = (cpu.PC != not_taken_pc);
+        return taken ? opcode_cycles[opcode] : branch_cycles[opcode];
+    }
     // placeholder value
-    return 4;
+    return opcode_cycles[opcode];
 }
 
 
@@ -1855,6 +1888,7 @@ bool execute_cb_opcode(uint8_t opcode) {
             cpu.F = 0;
 
             // dont set the Z flag for A case
+            if (cpu.A == 0) cpu.F |= FLAG_Z;
             if (carry)    cpu.F |= FLAG_C;
             break;
         }
@@ -2028,9 +2062,13 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL A
         case 0x17: {
             bool carry_out;
+            // save carry BEFORE clearing F
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+
             cpu.A = RL(cpu.A, (cpu.F & FLAG_C), &carry_out);
             cpu.F = 0;
             // Z flag is not set for RL A
+            if (cpu.A == 0) cpu.F |= FLAG_Z; 
             if (carry_out)  cpu.F |= FLAG_C;
             break;
         }
@@ -2061,7 +2099,8 @@ bool execute_cb_opcode(uint8_t opcode) {
             uint16_t addr = REG_HL;
             uint8_t val = mmu_read(addr);
             mmu_write(addr, RRC(val));
-            return 16;
+            // return 16;
+            break;
         }
         case 0x0F: cpu.A = RRC(cpu.A); break;   // RRC A
         
@@ -2092,7 +2131,8 @@ bool execute_cb_opcode(uint8_t opcode) {
             uint16_t addr = REG_HL;
             uint8_t val = mmu_read(addr);
             mmu_write(addr, RR(val));
-            return 16;
+            // return 16; <- since cycles are now handled by the cycles.c module
+            break;
         }
         case 0x1F: cpu.A = RR(cpu.A); break;    // RR A
 
