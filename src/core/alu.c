@@ -127,7 +127,7 @@ void SBC_A(uint8_t val) {
     if ((cpu.A & 0x0F) < ((val & 0x0F) + carry)) {
         cpu.F |= FLAG_H;
     }
-    if (cpu.A < (val + carry)) {
+    if ((uint16_t)cpu.A < ((uint16_t)val + carry)) {
         cpu.F |= FLAG_C;
     }
     cpu.A = result & 0xFF;
@@ -210,19 +210,14 @@ void ADD_HL(uint16_t val) {
  */
 void ADD_SP(int8_t val) {
     uint16_t sp = cpu.SP;
-    uint16_t result = sp + val;
+    uint32_t result = sp + val;
 
-    cpu.F = 0; // Reset Z and N
+    cpu.F = 0;  // Z and N both reset
 
-    // Half-carry check (bit 3)
-    if (((sp & 0x0F) + (val & 0x0F)) > 0x0F) {
-        cpu.F |= FLAG_H;
-    }
-    // Full-carry check (bit 7)
-    if (((sp & 0xFF) + (val & 0xFF)) > 0xFF) {
-        cpu.F |= FLAG_C;
-    }
-    cpu.SP = result;
+    if (((sp ^ val ^ result) & 0x10) != 0) cpu.F |= FLAG_H;
+    if (((sp ^ val ^ result) & 0x100) != 0) cpu.F |= FLAG_C;
+
+    cpu.SP = result & 0xFFFF;
 }
 
 
@@ -432,38 +427,17 @@ void DAA() {
     uint16_t a = cpu.A;
 
     if (!(cpu.F & FLAG_N)) { // After an addition
-        if ((cpu.F & FLAG_C) || a > 0x99) {
-            a += 0x60;
-            cpu.F |= FLAG_C;
-        }
-        if ((cpu.F & FLAG_H) || (a & 0x0F) > 0x09) {
-            a += 0x06;
-        }
+        if ((cpu.F & FLAG_H) || (a & 0x0F) > 0x09) a += 0x06;
+        if ((cpu.F & FLAG_C) || a > 0x9F) { a += 0x60; cpu.F |= FLAG_C; }
     } else { // After a subtraction
-        if (cpu.F & FLAG_C) {
-            a -= 0x60;
-        }
-        if (cpu.F & FLAG_H) {
-            a -= 0x06;
-        }
+        if (cpu.F & FLAG_H) a -= 0x06;
+        if (cpu.F & FLAG_C) a -= 0x60;
     }
 
-    // Flag Logic:
-
-    // The H flag is always cleared
-    cpu.F &= ~FLAG_H; 
-
-    // the Z flag is set based on results   
-    if ((a & 0xFF) == 0) {
-        cpu.F |= FLAG_Z;
-    } else {
-        cpu.F &= ~FLAG_Z;
-    }   
-    
-    // The C flag is set if the addition path caused a carry out 
-    if ((a & 0x100) != 0) {
-        cpu.F |= FLAG_C; // preserve the carry
-    }
+    // The H flag is always cleared after DAA
+    // The Z flag is set based on the result
+    cpu.F &= ~(FLAG_H | FLAG_Z);
+    if ((a & 0xFF) == 0) cpu.F |= FLAG_Z;
 
     //update the A register with the adjusted value
     cpu.A = a & 0xFF;
