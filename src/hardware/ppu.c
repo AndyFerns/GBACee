@@ -261,7 +261,15 @@ void ppu_render_scanline(void) {
             uint8_t lo = mmu_read(tile_addr + fine_y * 2);
             uint8_t hi = mmu_read(tile_addr + fine_y * 2 + 1);
 
-            uint8_t color_idx = ((hi >> fine_x) & 1) << 1 | ((lo >> fine_x) & 1);
+            static bool has_logged_vram = false;
+            if ((lo != 0 || hi != 0) && !has_logged_vram) {
+                printf("VRAM has non-zero pixels! tile_id=0x%02X\n", tile_id);
+                has_logged_vram = true;
+            }
+
+            uint8_t bit_1 = (lo >> fine_x) & 1;
+            uint8_t bit_2 = (hi >> fine_x) & 1;
+            uint8_t color_idx = (bit_2 << 1) | bit_1;
             bg_color_idx[px]  = color_idx;
 
             uint8_t shade = decode_palette(bgp, color_idx);
@@ -362,6 +370,29 @@ static void ppu_present_frame(void) {
     SDL_RenderClear(ppu.renderer);
     SDL_RenderCopy(ppu.renderer, ppu.texture, NULL, NULL);
     SDL_RenderPresent(ppu.renderer);
+
+    static int frame_count = 0;
+    frame_count++;
+    if (frame_count == 60) {
+        FILE *f = fopen("frame_60.ppm", "wb");
+        if (f) {
+            fprintf(f, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
+            for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+                uint32_t p = ppu.framebuffer[i];
+                uint8_t r = (p >> 16) & 0xFF;
+                uint8_t g = (p >> 8) & 0xFF;
+                uint8_t b = p & 0xFF;
+                fwrite(&r, 1, 1, f);
+                fwrite(&g, 1, 1, f);
+                fwrite(&b, 1, 1, f);
+            }
+            fclose(f);
+            printf("Dumped frame_60.ppm\n");
+        }
+    }
+
+    // rudimentary frame pacing (~60 FPS)
+    SDL_Delay(16);
 
     // Frame rate limiting (59.73 Hz ~ 16.74 ms per frame)
     static uint32_t last_frame_time = 0;
