@@ -70,6 +70,12 @@ int main(int argc, char *argv[]) {
         */
         int cycles_this_step = cpu_step();
 
+        static int insn_count = 0;
+        if (++insn_count % 1000000 == 0) {
+            printf("Executed %d million instructions. PC=0x%04X, LY=%d, LCDC=0x%02X\n", insn_count / 1000000, cpu.PC, ppu.ly, mmu_read(0xFF40));
+            fflush(stdout);
+        }
+
         if (cpu.error) {
             LOG_ERROR("CPU encountered a fatal error. Stopping.\n");
             break;
