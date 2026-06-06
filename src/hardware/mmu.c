@@ -143,6 +143,10 @@ uint8_t mmu_read(uint16_t addr) {
     }
     // Timer Suite
     if (addr <= 0xFF7F) {
+        if (addr == 0xFF00) {
+            uint8_t select = mmu.io[0x00] & 0x30;
+            return 0xC0 | select | 0x0F; // Return all buttons unpressed (1s)
+        }
         if (addr == 0xFF04) return mmu.internal_timer >> 8;     // DIV
         if (addr == 0xFF05) return mmu.tima;                    // TIMA
         if (addr == 0xFF06) return mmu.tma;                     // TMA
