@@ -5,9 +5,9 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 
-#define SCREEN_WIDTH  160
-#define SCREEN_HEIGHT 144
-#define SCREEN_SCALE_DEFAULT 3
+#define SCREEN_WIDTH  160       // 160p width 
+#define SCREEN_HEIGHT 144       // 144p height
+#define SCREEN_SCALE_DEFAULT 3  // default scale : 3
 
 typedef struct {
     SDL_Window   *window;
