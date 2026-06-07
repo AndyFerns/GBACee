@@ -3,11 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <SDL2/SDL.h>
-
-#define SCREEN_WIDTH  160
-#define SCREEN_HEIGHT 144
-#define SCREEN_SCALE  3
+#include "display.h"
 
 // PPU Modes
 typedef enum {
@@ -50,11 +46,11 @@ typedef struct {
 #define SPRITE_PALETTE    0x10  // 0=OBP0, 1=OBP1
 
 typedef struct {
-    // SDL
-    SDL_Window   *window;
-    SDL_Renderer *renderer;
-    SDL_Texture  *texture;
+    // SDL related struct items relocated to display module in display.c
     uint32_t      framebuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+    // flag to check for next frame readiness
+    bool     frame_ready;
 
     // Timing
     PPUMode  mode;
