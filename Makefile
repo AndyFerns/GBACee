@@ -10,7 +10,7 @@ BUILD_DIR = build
 BIN = gbcee
 
 # Source and object files
-SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/core/*.c $(SRC_DIR)/hardware/*.c $(SRC_DIR)/platform/*.c $(SRC_DIR)/debug/*.c)
+SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/core/*.c $(SRC_DIR)/hardware/*.c $(SRC_DIR)/platform/*.c $(SRC_DIR)/debug/*.c $(SRC_DIR)/display/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
 # Create build/ if it doesn't exist
