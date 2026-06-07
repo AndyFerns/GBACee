@@ -1,6 +1,5 @@
 #include "ppu.h"
 #include "mmu.h"
-#include <SDL2/SDL.h>
 #include <string.h>
 
 // Global PPU state
@@ -29,24 +28,7 @@ static void ppu_present_frame(void);
  * @brief Initializes the PPU, creates the SDL window and rendering context.
  */
 void ppu_init(void) {
-    SDL_SetMainReady();
-    SDL_Init(SDL_INIT_VIDEO);
-    ppu.window = SDL_CreateWindow(
-        "GBCee - Game Boy Emulator",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
-        SCREEN_WIDTH * SCREEN_SCALE,
-        SCREEN_HEIGHT * SCREEN_SCALE,
-        0
-    );
-    ppu.renderer = SDL_CreateRenderer(ppu.window, -1, SDL_RENDERER_ACCELERATED);
-    ppu.texture = SDL_CreateTexture(
-        ppu.renderer,
-        SDL_PIXELFORMAT_ARGB8888,
-        SDL_TEXTUREACCESS_STREAMING,
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT
-    );
+    // relocated SDL initialization to display.c
     memset(ppu.framebuffer, 0xFF, sizeof(ppu.framebuffer)); // White screen
 
     // Initialize PPU state
@@ -110,11 +92,14 @@ void ppu_step(int cycles) {
 
                 if (ppu.ly == 144) {
                     ppu_set_mode(PPU_MODE_VBLANK);
+
                     // trigger VBlank interrupt
                     uint8_t ifl = mmu_read(0xFF0F);
                     mmu_write(0xFF0F, ifl | 0x01);
+
                     // present the completed frame
-                    ppu_present_frame();
+                    // ppu_present_frame();
+                    ppu.frame_ready = true;     // signal ready instead of directly presenting frame
                 } else {
                     ppu_set_mode(PPU_MODE_OAM);
                 }
@@ -361,54 +346,54 @@ void ppu_render_scanline(void) {
     }
 }
 
-/**
- * @brief Presents the completed framebuffer to the SDL window.
- */
-static void ppu_present_frame(void) {
-    SDL_UpdateTexture(ppu.texture, NULL, ppu.framebuffer,
-                      SCREEN_WIDTH * sizeof(uint32_t));
-    SDL_RenderClear(ppu.renderer);
-    SDL_RenderCopy(ppu.renderer, ppu.texture, NULL, NULL);
-    SDL_RenderPresent(ppu.renderer);
+// /**
+//  * @brief Presents the completed framebuffer to the SDL window.
+//  */
+// static void ppu_present_frame(void) {
+//     SDL_UpdateTexture(ppu.texture, NULL, ppu.framebuffer,
+//                       SCREEN_WIDTH * sizeof(uint32_t));
+//     SDL_RenderClear(ppu.renderer);
+//     SDL_RenderCopy(ppu.renderer, ppu.texture, NULL, NULL);
+//     SDL_RenderPresent(ppu.renderer);
 
-    static int frame_count = 0;
-    frame_count++;
-    if (frame_count == 60) {
-        FILE *f = fopen("frame_60.ppm", "wb");
-        if (f) {
-            fprintf(f, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
-            for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
-                uint32_t p = ppu.framebuffer[i];
-                uint8_t r = (p >> 16) & 0xFF;
-                uint8_t g = (p >> 8) & 0xFF;
-                uint8_t b = p & 0xFF;
-                fwrite(&r, 1, 1, f);
-                fwrite(&g, 1, 1, f);
-                fwrite(&b, 1, 1, f);
-            }
-            fclose(f);
-            printf("Dumped frame_60.ppm\n");
-        }
-    }
+//     static int frame_count = 0;
+//     frame_count++;
+//     if (frame_count == 60) {
+//         FILE *f = fopen("frame_60.ppm", "wb");
+//         if (f) {
+//             fprintf(f, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
+//             for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+//                 uint32_t p = ppu.framebuffer[i];
+//                 uint8_t r = (p >> 16) & 0xFF;
+//                 uint8_t g = (p >> 8) & 0xFF;
+//                 uint8_t b = p & 0xFF;
+//                 fwrite(&r, 1, 1, f);
+//                 fwrite(&g, 1, 1, f);
+//                 fwrite(&b, 1, 1, f);
+//             }
+//             fclose(f);
+//             printf("Dumped frame_60.ppm\n");
+//         }
+//     }
 
-    // rudimentary frame pacing (~60 FPS)
-    SDL_Delay(16);
+//     // rudimentary frame pacing (~60 FPS)
+//     SDL_Delay(16);
 
-    // Frame rate limiting (59.73 Hz ~ 16.74 ms per frame)
-    static uint32_t last_frame_time = 0;
-    uint32_t current_time = SDL_GetTicks();
-    uint32_t elapsed = current_time - last_frame_time;
-    if (elapsed < 16) {
-        SDL_Delay(16 - elapsed);
-    }
-    last_frame_time = SDL_GetTicks();
-}
+//     // Frame rate limiting (59.73 Hz ~ 16.74 ms per frame)
+//     static uint32_t last_frame_time = 0;
+//     uint32_t current_time = SDL_GetTicks();
+//     uint32_t elapsed = current_time - last_frame_time;
+//     if (elapsed < 16) {
+//         SDL_Delay(16 - elapsed);
+//     }
+//     last_frame_time = SDL_GetTicks();
+// }
 
-/**
- * @brief Shuts down the PPU and cleans up SDL resources.
- */
-void ppu_shutdown(void) {
-    if (ppu.texture)  SDL_DestroyTexture(ppu.texture);
-    if (ppu.renderer) SDL_DestroyRenderer(ppu.renderer);
-    if (ppu.window)   SDL_DestroyWindow(ppu.window);
-}
+// /**
+//  * @brief Shuts down the PPU and cleans up SDL resources.
+//  */
+// void ppu_shutdown(void) {
+//     if (ppu.texture)  SDL_DestroyTexture(ppu.texture);
+//     if (ppu.renderer) SDL_DestroyRenderer(ppu.renderer);
+//     if (ppu.window)   SDL_DestroyWindow(ppu.window);
+// }

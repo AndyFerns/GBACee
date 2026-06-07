@@ -6,7 +6,7 @@
 #include "interrupts.h"
 #include "diagnostics.h"
 #include "ppu.h"
-#include <SDL2/SDL.h>
+#include "display.h"
 #include "args.h"
 
 
@@ -41,7 +41,8 @@ int main(int argc, char *argv[]) {
     // should follow emulator lifecycle:
     // initialize hardware -> load the game -> run main loop -> clean up resources 
 
-    // 1. Initialize hardware
+    // 1. Initialize hardware - display before PPU since PPU might need WIDTH/HEIGHT which display.h owns
+    display_init(SCREEN_SCALE_DEFAULT);
     mmu_init();
     cpu_reset();
     ppu_init();      // Initialize the Picture Processing Unit 
@@ -51,24 +52,25 @@ int main(int argc, char *argv[]) {
     // only call mmu_load_rom and not load_rom
     if (mmu_load_rom(argv[rom_index]) != 0) {
         fprintf(stderr, "Error: Failed to load ROM '%s'.\n", argv[rom_index]);
+        display_shutdown();     // close the SDL window
         diag_shutdown();
         return 1;
     }
 
     // Main emulation loop
     TRACE(" --- Starting Emulation --- \n");
-    while (true) { 
+    while (!display_should_quit()) { 
         // Poll SDL events (needed for window close, future joypad)
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) goto cleanup;
-        }
+        // Window events, keyboard shortcuts, quit signal
+        display_poll_events();
 
         /** Execute one instruction per cycle 
          * cpu step handles the halted state internally
          * doesnt fetch an opcode for halting
         */
         int cycles_this_step = cpu_step();
+
+        // Run one full frame worth of cycles (70224 T-cycles per GB frame)
 
         static int insn_count = 0;
         if (++insn_count % 1000000 == 0) {
@@ -88,12 +90,18 @@ int main(int argc, char *argv[]) {
 
         // Check for interrupts after all hardware has been updated
         handle_interrupts();
+
+        // signalling PPU to render in frames which are ready
+        if (ppu.frame_ready) {
+            display_present(ppu.framebuffer);
+            ppu.frame_ready = false;
+        }
     }
 
 cleanup:
     // 4. cleanup  
     TRACE(" --- Emulation Halted --- \n");
-    ppu_shutdown();
+    display_shutdown();     // SDL cleanup lives here
     diag_shutdown();
     mmu_free(); // prevent memory leaks from loaded roms
     return 0;
