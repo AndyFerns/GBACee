@@ -17,7 +17,7 @@ uint8_t DEC(uint8_t val);
 // 16- bit arithmetic ops
 
 void ADD_HL(uint16_t val);
-void ADD_SP(uint16_t val);
+void ADD_SP(int8_t val);
 void INC_16(uint16_t *regist);
 void DEC_16(uint16_t *regist);
 

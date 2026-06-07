@@ -54,6 +54,14 @@ mmu_t mmu; // static mmu_t mmu change to static after running unit tests
  */
 void mmu_init() {
     memset(&mmu, 0, sizeof(mmu));
+    
+    // Set post-boot ROM default hardware register values
+    mmu.io[0x40] = 0x91; // LCDC
+    mmu.io[0x41] = 0x85; // STAT
+    mmu.io[0x47] = 0xFC; // BGP
+    mmu.io[0x48] = 0xFF; // OBP0
+    mmu.io[0x49] = 0xFF; // OBP1
+    
     TRACE("MMU Initialized!.\n");
 }
 
@@ -110,11 +118,6 @@ int mmu_load_rom(const char* filepath) {
  * @return Value at that address.
  */
 uint8_t mmu_read(uint16_t addr) {
-    // serial port stubbing
-    // temporarily setting value with bit 7 set
-    if (addr == 0xFF02) {
-        return 0xFF;
-    }
     if (addr <= 0x7FFF) {
         return mbc_read_rom(&mmu, addr);
         // return mmu.rom_data[addr]; // Placeholder for no MBC
@@ -140,14 +143,18 @@ uint8_t mmu_read(uint16_t addr) {
     }
     // Timer Suite
     if (addr <= 0xFF7F) {
+        if (addr == 0xFF00) {
+            uint8_t select = mmu.io[0x00] & 0x30;
+            return 0xC0 | select | 0x0F; // Return all buttons unpressed (1s)
+        }
         if (addr == 0xFF04) return mmu.internal_timer >> 8;     // DIV
         if (addr == 0xFF05) return mmu.tima;                    // TIMA
         if (addr == 0xFF06) return mmu.tma;                     // TMA
         if (addr == 0xFF07) return mmu.tac;                     // TAC
         if (addr == 0xFF0F) return mmu.interrupt_flag;          // added interrupt flag
 
-        if (addr == 0xFF01) return 0xFF;            // Serial Data (stub)
-        if (addr == 0xFF02) return 0xFF;            // Serial Control (stub)
+        if (addr == 0xFF01) return mmu.serial_data;                 // Serial Data
+        if (addr == 0xFF02) return mmu.io[0x02] | 0x7E;             // Serial Control (bits 1-6 always 1)
 
         return mmu.io[addr - 0xFF00];
     }
@@ -169,10 +176,19 @@ uint8_t mmu_read(uint16_t addr) {
  * @returns void
  */
 void mmu_write(uint16_t addr, uint8_t value) {
-    // serial port output stubbing
+    // Serial transfer registers
     if (addr == 0xFF01) {
-        printf("%c", value);
-        fflush(stdout); // immediately print the character
+        mmu.serial_data = value;
+        return;
+    }
+    if (addr == 0xFF02) {
+        if (value == 0x81) {  // transfer start with internal clock
+            printf("%c", mmu.serial_data);
+            fflush(stdout);
+            // signal transfer complete: clear bit 7, set serial interrupt
+            mmu.io[0x02] = value & 0x7F;
+            mmu.io[0x0F] |= 0x08;  // set IF bit 3 (serial interrupt)
+        }
         return;
     }
 
@@ -201,8 +217,16 @@ void mmu_write(uint16_t addr, uint8_t value) {
     if (addr <= 0xFEFF) { 
         return; 
     } 
-    // Timer Suite
+    // IO and Timer Suite
     if (addr <= 0xFF7F) {
+        // OAM DMA transfer
+        if (addr == 0xFF46) {
+            uint16_t src = (uint16_t)value << 8;
+            for (int i = 0; i < 0xA0; i++) {
+                mmu_write(0xFE00 + i, mmu_read(src + i));
+            }
+            return;
+        }
         if (addr == 0xFF04) { mmu.internal_timer = 0; return; }         // any write to DIV resets the timer
         if (addr == 0xFF05) { mmu.tima = value; return; }               // TIMA
         if (addr == 0xFF06) { mmu.tma = value; return; }               // TMA

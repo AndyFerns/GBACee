@@ -3,6 +3,9 @@
 #include "rom.h"
 #include "alu.h"
 
+// for cycle tables
+#include "cycles.h"
+
 #include "diagnostics.h"
 
 #include <stdbool.h>
@@ -39,6 +42,7 @@ void cpu_reset() {
     cpu.ime = false;
     cpu.ime_enable = false;
     cpu.ime_disable = false;
+    cpu.error = false;
 }
 
 
@@ -90,11 +94,12 @@ static uint16_t fetch_d16() {
  */
 int cpu_step() {
     // Halt if PC goes beyond 64KB or ROM loaded range
-    if (cpu.PC == 0xFFFF) { // ((uint32_t)cpu.PC >= 0x10000)
-        TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
-        // cpu.halted = true;
-        return 0;
-    }
+    // if (cpu.PC == 0xFFFF) { // ((uint32_t)cpu.PC >= 0x10000)
+    //     TRACE_CPU("[HALT] PC out of bounds: 0x%04X\n", cpu.PC);
+    //     cpu.error = true;
+    //     cpu.halted = true;
+    //     return 4;
+    // }
 
     if (cpu.halted) {
         return 4;
@@ -104,7 +109,7 @@ int cpu_step() {
     uint8_t ie_reg = mmu_get_ie_register();
     uint8_t if_reg = mmu_get_if_register();
     bool halt_bug = (mmu_read(cpu.PC) == 0x76 && // is the next instruction HALT?
-                                cpu.ime &&            // IME disabled?
+                                !cpu.ime &&            // IME disabled?
                                 (ie_reg & if_reg & 0x1F) != 0); // is there a pending & enabled interrupt?
 
 
@@ -125,12 +130,20 @@ int cpu_step() {
     TRACE_CPU("[PC=0x%04X] Opcode 0x%02X | A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X SP=%04X\n",
         pc, opcode, cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP);
 
+    // Snapshot PC right before execute (post-opcode fetch, pre-operand fetch)
+    uint16_t pre_exec_pc = cpu.PC;
+    
     // Instruction Execution Suite
     bool success;
 
+    // declare before to prevent scoping errors
+    uint8_t cb_opcode = 0;
+    bool cb_used = false;
+
     // CB - Prefixed Bit operations 
     if (opcode == 0xCB) {
-        uint8_t cb_opcode = fetch_d8();
+        cb_used = true;
+        cb_opcode = fetch_d8();  // assign to outer variable, do NOT re-declare
 
         // special logging for CB_opcodes
         // printf("[PC=0x%04X] Opcode 0xCB 0x%02X | A=0x%02X F=0x%02X B=0x%02X C=0x%02X D=0x%02X E=0x%02X H=0x%02X L=0x%02X SP=0x%04X\n", 
@@ -161,10 +174,34 @@ int cpu_step() {
     if (!success) {
         // unimplemented instruction was hit.
         LOG_ERROR("[FATAL] Unimplemented opcode 0x%02X at 0x%04X\n", opcode, pc);
-        return 0;
+        cpu.error = true;
+        cpu.halted = true;
+        return 4;
+    }
+
+    // access cb_used here 
+    if (cb_used) {
+        return cb_opcode_cycles[cb_opcode];
+    }
+
+    if (branch_cycles[opcode] != 0) {
+        // Determine expected not-taken PC (where PC lands if branch skipped):
+        // JR cc  (0x20,0x28,0x30,0x38): 1 operand byte  → not-taken PC = pre_exec_pc + 1
+        // JP cc  (0xC2,0xCA,0xD2,0xDA): 2 operand bytes → not-taken PC = pre_exec_pc + 2
+        // CALL cc(0xC4,0xCC,0xD4,0xDC): 2 operand bytes → not-taken PC = pre_exec_pc + 2
+        // RET cc (0xC0,0xC8,0xD0,0xD8): 0 operand bytes → not-taken PC = pre_exec_pc + 0
+        static const uint8_t operand_bytes[256] = {
+            [0x20]=1,[0x28]=1,[0x30]=1,[0x38]=1,   // JR cc
+            [0xC2]=2,[0xCA]=2,[0xD2]=2,[0xDA]=2,   // JP cc
+            [0xC4]=2,[0xCC]=2,[0xD4]=2,[0xDC]=2,   // CALL cc
+            [0xC0]=0,[0xC8]=0,[0xD0]=0,[0xD8]=0,   // RET cc
+        };
+        uint16_t not_taken_pc = pre_exec_pc + operand_bytes[opcode];
+        bool taken = (cpu.PC != not_taken_pc);
+        return taken ? opcode_cycles[opcode] : branch_cycles[opcode];
     }
     // placeholder value
-    return 4;
+    return opcode_cycles[opcode];
 }
 
 
@@ -882,7 +919,7 @@ bool execute_opcode(uint8_t opcode) {
             Z - Set if result is zero.
             N - Set.
             H - Set if no borrow from bit 4.
-            C - Set if no borro
+            C - Set if no borrow
          */
 
         case 0x9F: SBC_A(cpu.A); break;     //SBC A, A
@@ -1141,7 +1178,7 @@ bool execute_opcode(uint8_t opcode) {
             C - Set or reset acc
          */
 
-        case 0xE8: ADD_SP(cpu.SP); break;   //ADD SP, #
+        case 0xE8: ADD_SP((int8_t)fetch_d8()); break;   //ADD SP, #
 
 
         /**
@@ -1762,14 +1799,14 @@ bool execute_opcode(uint8_t opcode) {
 
             cpu.halted = true;
             // cpu.stopped = true;
-            return true;
-            // break;
+            break;
         }
 
         default:
             LOG_ERROR("[HALT] Unimplemented opcode: 0x%02X at 0x%04X\n", opcode, cpu.PC);
             cpu.PC--; // Rewind PC for debugging
 
+            cpu.error = true;
             cpu.halted = true;
             return false; // Safely halt on unknown opcode   
     }   
@@ -1855,6 +1892,7 @@ bool execute_cb_opcode(uint8_t opcode) {
             cpu.F = 0;
 
             // dont set the Z flag for A case
+            if (cpu.A == 0) cpu.F |= FLAG_Z;
             if (carry)    cpu.F |= FLAG_C;
             break;
         }
@@ -1956,7 +1994,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL B
         case 0x10: {
             bool carry_out;
-            cpu.B = RL(cpu.B, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.B = RL(cpu.B, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.B == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -1966,7 +2005,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL C
         case 0x11: {
             bool carry_out;
-            cpu.C = RL(cpu.C, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.C = RL(cpu.C, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.C == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -1976,7 +2016,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL D
         case 0x12: {
             bool carry_out;
-            cpu.D = RL(cpu.D, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.D = RL(cpu.D, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.D == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -1986,7 +2027,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL E
         case 0x13: {
             bool carry_out;
-            cpu.E = RL(cpu.E, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.E = RL(cpu.E, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.E == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -1996,7 +2038,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL H
         case 0x14: {
             bool carry_out;
-            cpu.H = RL(cpu.H, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.H = RL(cpu.H, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.H == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2006,7 +2049,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL L
         case 0x15: {
             bool carry_out;
-            cpu.L = RL(cpu.L, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            cpu.L = RL(cpu.L, old_carry, &carry_out);
             cpu.F = 0;
             if (cpu.L == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
@@ -2017,7 +2061,8 @@ bool execute_cb_opcode(uint8_t opcode) {
         case 0x16: {
             uint8_t val = mmu_read(REG_HL);
             bool carry_out;
-            uint8_t result = RL(val, (cpu.F & FLAG_C), &carry_out);
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+            uint8_t result = RL(val, old_carry, &carry_out);
             mmu_write(REG_HL, result);
             cpu.F = 0;
             if (result == 0) cpu.F |= FLAG_Z;
@@ -2028,9 +2073,12 @@ bool execute_cb_opcode(uint8_t opcode) {
         // RL A
         case 0x17: {
             bool carry_out;
-            cpu.A = RL(cpu.A, (cpu.F & FLAG_C), &carry_out);
+            // save carry BEFORE clearing F, normalized to 0 or 1
+            bool old_carry = (cpu.F & FLAG_C) != 0;
+
+            cpu.A = RL(cpu.A, old_carry, &carry_out);
             cpu.F = 0;
-            // Z flag is not set for RL A
+            if (cpu.A == 0) cpu.F |= FLAG_Z;
             if (carry_out)  cpu.F |= FLAG_C;
             break;
         }
@@ -2061,7 +2109,8 @@ bool execute_cb_opcode(uint8_t opcode) {
             uint16_t addr = REG_HL;
             uint8_t val = mmu_read(addr);
             mmu_write(addr, RRC(val));
-            return 16;
+            // return 16;
+            break;
         }
         case 0x0F: cpu.A = RRC(cpu.A); break;   // RRC A
         
@@ -2092,7 +2141,8 @@ bool execute_cb_opcode(uint8_t opcode) {
             uint16_t addr = REG_HL;
             uint8_t val = mmu_read(addr);
             mmu_write(addr, RR(val));
-            return 16;
+            // return 16; <- since cycles are now handled by the cycles.c module
+            break;
         }
         case 0x1F: cpu.A = RR(cpu.A); break;    // RR A
 
@@ -2279,6 +2329,7 @@ bool execute_cb_opcode(uint8_t opcode) {
 
         default: 
             LOG_ERROR("[CB] Unimplemented opcode: 0x%02X\n", opcode);
+            cpu.error = true;
             cpu.halted = true;
             return false;
     }

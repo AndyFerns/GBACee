@@ -103,4 +103,6 @@ CMakeUserPresets.json
 .history
 .ionide
 
+*.mp4
+
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,c,cmake
