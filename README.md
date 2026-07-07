@@ -72,12 +72,21 @@ This is the roadmap to a fully functional emulator. Items will be checked off as
 * [ ] Map keyboard keys to the Gameboy's button inputs (A, B, Start, Select, D-Pad).
 * [ ] Write button press states to the JOYP register (0xFF00).
 
+### Emulator Quality-of-Life Features
+
+* [ ] **Save States:** Serialise and restore complete emulator state to/from disk.
+* [ ] **Fast-forward / Rewind:** Frame-skip for fast-forward; circular frame buffer for rewind.
+
 ### Advanced Features
 
 * [ ] **Sound (APU):** Emulate the four sound channels.
 * [ ] **Additional MBCs:** Add support for MBC2, MBC3 (with RTC), and MBC5.
 * [ ] **BIOS Emulation:** Load and execute the original DMG BIOS ROM.
 * [ ] **Testing:** Pass Blargg's instruction and memory timing test ROMs.
+* [ ] **Additional MBCs:** Add support for MBC2, MBC3 (with RTC), and MBC5.
+* [ ] **BIOS Emulation:** Load and execute the original DMG boot ROM.
+* [ ] **Testing:** Pass Blargg's `cpu_instrs`, `instr_timing`, and `mem_timing` test ROMs.
+* [ ] **Accuracy & Performance Optimisations:** Improve cycle-level timing accuracy and rendering performance.
 
 ---
 
@@ -99,26 +108,78 @@ You will need the **SDL2** development library to compile the project.
     brew install sdl2
     ```
 
+* **On Windows:**
+
+    The recommended approach (and the one i use) is [MSYS2](https://www.msys2.org/), which provides a Unix-like shell environment and the MinGW-w64 toolchain on Windows.
+
+    1. Download and install MSYS2 from [msys2.org](https://www.msys2.org/).
+
+    2. Open the **MSYS2 MINGW64** shell and update the package database:
+
+    ```bash
+    pacman -Syu
+    ```
+
+    3. Install the MinGW-w64 GCC toolchain and SDL2 development libraries:
+
+    ```bash
+    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 make
+    ```
+
+    4. After building, copy `SDL2.dll` from `C:\msys64\mingw64\bin\` into the same directory as your compiled `gbcee.exe` so it can be found at runtime. Alternatively, add `C:\msys64\mingw64\bin` to your system `PATH`.
+
+> **Alternative (without MSYS2):** Download the SDL2 MinGW development libraries directly from the [SDL2 releases page](https://github.com/libsdl-org/SDL/releases), extract them, and point your compiler at the `include` and `lib` directories manually. This requires more manual setup of include/library paths in your build script.
+
 ### Compilation and Execution
 
-1.**Clone the repository:**
+#### Windows
+
+1. **Clone the repository** (in your MSYS2 MINGW64 shell or Git Bash):
 
 ```bash
-git clone [https://github.com/AndyFerns/GBCee.git](https://github.com/AndyFerns/GBCee.git)
-cd GBCee
+    git clone https://github.com/AndyFerns/GBCee.git
+    cd GBCee
 ```
-
-2.**Compile the project using the Build.bat batchfile:**
+ 
+2. **Compile using the provided build script:**
 
 ```bash
-./build
+    ./build.bat
 ```
-
-3.**Run the emulator with a Gameboy ROM:**
+ 
+3. **Run the emulator with a Gameboy ROM:**
 
 ```bash
-./gbcee /path/to/your/rom.gb
+    ./gbcee.exe /path/to/your/rom.gb
 ```
+
+#### Linux / macOS
+
+1. **Clone the repository:**
+
+```bash
+    git clone https://github.com/AndyFerns/GBCee.git
+    cd GBCee
+```
+
+1. **Compile the project:**
+
+```bash
+    ./build
+```
+
+1. **Run the emulator with a Gameboy ROM:**
+
+```bash
+    ./gbcee /path/to/your/rom.gb
+```
+
+---
+
+## References
+
+* Nintendo Game Boy Programming Manual
+* [Pan Docs](./documents/GBCPUManual.pdf) — Game Boy Technical Reference
 
 ## Author
 
