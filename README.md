@@ -6,7 +6,13 @@ The primary goal is to create a cycle-accurate and well-documented emulator for 
 
 ## Current State: Debug Output
 
-While the PPU (graphics) is still under development, the CPU core is fully implemented and correctly executes the instruction set of many games. The emulator currently outputs a detailed log of the CPU's state for each instruction, which is invaluable for debugging and verification.
+Current State: Tetris is Running!
+
+After nearly a year of development, GBCee has reached a major milestone — it can now successfully boot and run Tetris end-to-end. This required a fully operational CPU core, PPU pipeline, interrupt system, timer subsystem, MMU, and cartridge support all working in concert.
+
+The emulator renders the full 160×144 pixel Game Boy framebuffer to an SDL2 window, correctly handles VBlank and LCD STAT interrupts, and executes the Sharp LR35902 instruction set with enough accuracy to run commercial ROM software.
+
+A runtime diagnostics and tracing subsystem is also in place, which logs a detailed snapshot of the CPU state for each instruction — invaluable for debugging and cross-referencing against known-good emulator traces.
 
 ```powershell
 # Example of the current debug output
@@ -49,17 +55,17 @@ This is the roadmap to a fully functional emulator. Items will be checked off as
 
 ### Graphics (PPU)
 
-* [ ] Implement the PPU state machine (OAM Scan, Drawing, HBlank, VBlank).
-* [ ] Render background and window tiles from VRAM.
-* [ ] Render sprites (OAM).
-* [ ] Draw the final 160x144 pixel buffer to the SDL window.
-* [ ] Handle VBlank interrupts correctly.
+* [x] Implement the PPU state machine (OAM Scan, Drawing, HBlank, VBlank).
+* [x] Render background and window tiles from VRAM.
+* [x] Render sprites (OAM).
+* [x] Draw the final 160x144 pixel buffer to the SDL window.
+* [x] Handle VBlank interrupts correctly.
 
 ### Timers & Interrupts
 
-* [ ] Implement DIV, TIMA, TMA, and TAC timer registers.
-* [ ] Implement the Interrupt Master Enable (IME) flag and handler.
-* [ ] Fire interrupts correctly for VBlank, LCD STAT, Timer, etc.
+* [x] Implement DIV, TIMA, TMA, and TAC timer registers.
+* [x] Implement the Interrupt Master Enable (IME) flag and handler.
+* [x] Fire interrupts correctly for VBlank, LCD STAT, Timer, etc.
 
 ### Input Handling
 
